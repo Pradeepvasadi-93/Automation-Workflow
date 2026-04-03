@@ -23,6 +23,7 @@ const { markLeadCompletedIfAllStepsSent } = require("../service/SequenceService"
   }
 })();
 
+console.log("url: ", process.env.REDIS_URL);
 // Create worker queue
 const emailQueue = new Queue("emailQueue", {
   redis: {
