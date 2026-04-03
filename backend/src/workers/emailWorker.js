@@ -25,13 +25,8 @@ const { markLeadCompletedIfAllStepsSent } = require("../service/SequenceService"
 
 console.log("url: ", process.env.REDIS_URL);
 
-// Redis configuration with fallback
-const redisConfig = process.env.REDIS_URL
-  ? { url: process.env.REDIS_URL }
-  : {
-      host: "127.0.0.1",
-      port: 6379,
-    };
+// Redis configuration
+const redisConfig = { url: process.env.REDIS_URL };
 
 // Create worker queue
 const emailQueue = new Queue("emailQueue", {
