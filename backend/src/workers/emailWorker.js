@@ -35,6 +35,13 @@ const emailQueue = new Queue("emailQueue", {
 
 console.log("Worker created and starting...");
 
+// Process test jobs
+emailQueue.process("test-job", async (job) => {
+  console.log(`🔄 Processing test job ${job.id} with data:`, job.data);
+  console.log('Test job processed successfully');
+  return 'test-done';
+});
+
 // Process generic jobs (backwards compatibility)
 emailQueue.process(async (job) => {
   console.log(`🔄 Processing job ${job.id} with data:`, job.data);
