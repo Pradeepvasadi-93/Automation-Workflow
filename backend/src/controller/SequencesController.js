@@ -256,20 +256,81 @@ exports.startSequence = async (req, res) => {
       return res.status(400).json({ error: "Invalid sequence id" });
     }
 
-    if (!leadId || !isValidObjectId(leadId)) {
-      return res.status(400).json({ error: "Valid leadId is required" });
-    }
-
     const sequence = await Sequence.findById(id);
     if (!sequence) {
       return res.status(404).json({ error: "Sequence not found" });
     }
 
-    const lead = await Lead.findById(leadId);
-    if (!lead) {
-      return res.status(404).json({ error: "Lead not found" });
+    // If leadId is provided, validate and assign it
+    if (leadId) {
+      if (!isValidObjectId(leadId)) {
+        return res.status(400).json({ error: "Valid leadId is required" });
+      }
+
+      const lead = await Lead.findById(leadId);
+      if (!lead) {
+        return res.status(404).json({ error: "Lead not found" });
+      }
+
+      const alreadyAssigned = sequence.assignedUsers.some(
+        (assignedId) => assignedId.toString() === leadId
+      );
+
+      if (!alreadyAssigned) {
+        sequence.assignedUsers.push(leadId);
+      }
+
+      sequence.steps.forEach((step) => {
+        if (!step.leadId) {
+          step.leadId = leadId;
+        }
+      });
+
+      const createdMessages = [];
+
+      for (const step of sequence.steps) {
+        // Calculate delay from this step's trigger
+        const delayMs = (step.trigger?.delayMinutes || 0) * 60 * 1000;
+        
+        const status =
+          step.order === 1
+            ? step.approved
+              ? delayMs > 0 ? "SCHEDULED" : "SENT"
+              : "PENDING_APPROVAL"
+            : "QUEUED";
+
+        const messageDoc = await Message.findOneAndUpdate(
+          {
+            leadId,
+            sequenceId: sequence._id,
+            stepOrder: step.order,
+          },
+          {
+            $set: {
+              leadId,
+              sequenceId: sequence._id,
+              stepId: step._id,
+              stepOrder: step.order,
+              channel: step.channel,
+              content: step.message,
+              approved: step.approved,
+              status,
+              createdAt: new Date(),
+            },
+          },
+          {
+            upsert: true,
+            returnDocument: "after",
+            runValidators: true,
+            setDefaultsOnInsert: true,
+          }
+        );
+
+        createdMessages.push(messageDoc);
+      }
     }
 
+    // Set sequence status to active
     sequence.status = "active";
 
     // Ensure queue is running for active sequence
@@ -279,109 +340,16 @@ exports.startSequence = async (req, res) => {
       console.warn("Failed to resume queue in startSequence:", err.message);
     }
 
-    const alreadyAssigned = sequence.assignedUsers.some(
-      (assignedId) => assignedId.toString() === leadId
-    );
-
-    if (!alreadyAssigned) {
-      sequence.assignedUsers.push(leadId);
-    }
-
-    sequence.steps.forEach((step) => {
-      if (!step.leadId) {
-        step.leadId = leadId;
-      }
-    });
-
     await sequence.save();
 
-    const createdMessages = [];
-
-    for (const step of sequence.steps) {
-      // Calculate delay from this step's trigger
-      const delayMs = (step.trigger?.delayMinutes || 0) * 60 * 1000;
-      
-      const status =
-        step.order === 1
-          ? step.approved
-            ? delayMs > 0 ? "SCHEDULED" : "SENT"
-            : "PENDING_APPROVAL"
-          : "QUEUED";
-
-      const messageDoc = await Message.findOneAndUpdate(
-        {
-          leadId,
-          sequenceId: sequence._id,
-          stepOrder: step.order,
-        },
-        {
-          $set: {
-            leadId,
-            sequenceId: sequence._id,
-            stepId: step._id,
-            channel: step.channel,
-            content: step.message,
-            status,
-            stepOrder: step.order,
-            aiDraft: step.aiDraft,
-            approved: step.approved,
-            sentAt: step.order === 1 && step.approved && delayMs === 0 ? new Date() : null,
-            scheduledFor: step.order === 1 && step.approved && delayMs > 0 ? new Date(Date.now() + delayMs) : null,
-          },
-        },
-        {
-          returnDocument: "after",
-          upsert: true,
-          setDefaultsOnInsert: true,
-        }
-      );
-
-      createdMessages.push(messageDoc);
-    }
-
-    const firstStep = sequence.steps.find((s) => s.order === 1);
-    const firstStepDelayMs = (firstStep?.trigger?.delayMinutes || 0) * 60 * 1000;
-
-    if (firstStep && firstStep.approved && firstStep.channel === "email" && lead.email) {
-      const draftDoc = await Draft.findOne({ lead_id: leadId });
-      const draftResponse = draftDoc?.draft_response || firstStep.message;
-      const leadName = draftDoc?.lead_name || lead.name || "there";
-
-      // Send immediately only if no delay
-      if (firstStepDelayMs === 0) {
-        await EmailService.sendInitialDraftEmail(
-          lead.email,
-          leadName,
-          draftResponse
-        );
-      } else {
-        // Queue first step with its delay
-        await emailQueue.add(
-          "send-sequence-step",
-          {
-            sequenceId: sequence._id.toString(),
-            stepId: firstStep._id.toString(),
-            leadId: leadId.toString(),
-          },
-          {
-            delay: firstStepDelayMs,
-            jobId: `${sequence._id}-${leadId}-${firstStep.order}`,
-          }
-        );
-      }
-
-      await scheduleNextStep(sequence, firstStep, leadId);
-    }
-
-    // If this sequence has only one step and it was processed as sent, complete the lead.
-    await markLeadCompletedIfAllStepsSent(leadId, sequence._id);
-
     return res.json({
-      message: "Sequence started successfully",
+      message: leadId
+        ? "Sequence started and lead assigned"
+        : "Sequence started",
       sequence,
-      logs: createdMessages,
     });
   } catch (err) {
+    console.error("startSequence error:", err);
     return res.status(500).json({ error: err.message });
   }
 };
