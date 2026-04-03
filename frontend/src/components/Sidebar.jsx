@@ -31,15 +31,13 @@ export default function Sidebar({ mobileMenuOpen, setMobileMenuOpen }) {
             </Link>
           ))}
         </nav>
-        <div className="w-full mb-2 px-4 flex justify-between items-center" >
+        <div className="w-full bg-gray-700 mb-2 px-4 flex justify-center align-center items-center" >
+          <span className="text-md text-gray-300">Logout</span>
           <button
-            className="mb-2 w-15 h-12.5 rounded p-2 text-sm flex flex-col justify-center align-center items-center text-white cursor-pointer"
+            className=" rounded p-2 text-sm flex flex-col justify-center align-center items-center text-white cursor-pointer"
             onClick={() => { navigate("/"); setMobileMenuOpen(false); }}
           >
-            <img src="/exit.svg" alt="Logout icon" className="inline w-7 h-7 mr-2" />
-          </button>
-          <button  className=" mb-3 bg-none w-15 h-12.5 rounded p-2 text-sm flex flex-col justify-center items-center align-center cursor-pointer text-white">
-              <img src="/diamond.svg" alt="Settings icon" className="inline w-8 h-8 mr-2" />
+            <img src="/exit.svg" alt="Logout icon" className="inline w-5 h-6 mr-2" />
           </button>
         </div>
       </div>
