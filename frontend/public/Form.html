@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Form</title>
+  <style>
+    body {
+      background-color: #0a0a0f;
+      height: 100vh;
+      margin: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+
+    .form-container {
+      background: white;
+      color: black;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      border-radius: 8px;
+      padding: 24px;
+      width: 50%;
+      height: 60%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 16px;
+    }
+
+    .form-container h2 {
+      font-size: 20px;
+      font-weight: 600;
+      margin: 0;
+    }
+
+    #leadForm {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      width: 100%;
+    }
+
+    input,
+    textarea {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 10px;
+      font-size: 14px;
+      color: black;
+      outline: none;
+      font-family: Arial, sans-serif;
+    }
+
+    button {
+      background-color: #2563eb;
+      color: white;
+      font-weight: 600;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-top: 10px;
+      width: 80%;
+      align-self: center;
+      cursor: pointer;
+      transition: background-color 0.2s, transform 0.2s;
+    }
+
+    button:hover {
+      background-color: #1d4ed8;
+      transform: scale(1.02);
+    }
+
+    button:disabled {
+      background-color: #93c5fd;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .loader-box {
+      display: none;
+      width: 100%;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: -6px;
+      color: #2563eb;
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 3px solid #dbeafe;
+      border-top: 3px solid #2563eb;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      100% {
+        transform: rotate(360deg);
+      }
+    }
+
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 50;
+    }
+
+    .modal {
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      padding: 24px;
+      width: 30%;
+      height: 30%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+    }
+
+    .modal h1 {
+      font-size: 24px;
+      font-weight: bold;
+      margin: 0;
+    }
+
+    .modal p {
+      margin-top: 10px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+  <div class="form-container">
+    <h2>Lead Input Form</h2>
+    <form id="leadForm">
+      <input name="name" placeholder="Name" required />
+      <input name="email" placeholder="Email" required />
+      <input name="phone" placeholder="Phone" required />
+      <textarea name="query" placeholder="Query" rows="5" required></textarea>
+      <button type="submit" id="submitBtn">Save</button>
+
+      <div class="loader-box" id="loaderBox">
+        <div class="spinner"></div>
+        <span>Submitting...</span>
+      </div>
+    </form>
+  </div>
+
+  <div class="modal-overlay" id="modal">
+    <div class="modal">
+      <h1>Done</h1>
+      <p>Submitted Successfully</p>
+      <button id="closeModal">OK</button>
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById("leadForm");
+    const modal = document.getElementById("modal");
+    const closeModal = document.getElementById("closeModal");
+    const submitBtn = document.getElementById("submitBtn");
+    const loaderBox = document.getElementById("loaderBox");
+
+    const scriptURL =
+      "https://script.google.com/macros/s/AKfycbzlAziFrGDEqdWBlcCkWxMlwANlD0KKtgKZzNumEYHw2jMfRk1rueibw7wIVdAzTDs/exec";
+
+    form.addEventListener("submit", async function (e) {
+      e.preventDefault();
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Saving...";
+      loaderBox.style.display = "flex";
+
+      const formData = {
+        name: form.querySelector("[name='name']").value,
+        email: form.querySelector("[name='email']").value,
+        phone: form.querySelector("[name='phone']").value,
+        query: form.querySelector("[name='query']").value,
+      };
+
+      console.log(formData);
+
+      try {
+        const [sheetRes, mongoRes] = await Promise.all([
+          fetch(scriptURL, {
+            method: "POST",
+            body: new FormData(form),
+          }),
+          fetch("http://localhost:5000/lead", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(formData),
+          }),
+        ]);
+
+        const sheetData = await sheetRes.json();
+        const mongoData = await mongoRes.json();
+
+        console.log("Saved to Google Sheet:", sheetData);
+        console.log("Saved to MongoDB:", mongoData);
+
+        loaderBox.style.display = "none";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Save";
+
+        modal.style.display = "flex";
+        form.reset();
+      } catch (error) {
+        console.error("Error!", error.message);
+
+        loaderBox.style.display = "none";
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Save";
+
+        alert("Submission failed. Please try again.");
+      }
+    });
+
+    closeModal.addEventListener("click", function () {
+      modal.style.display = "none";
+    });
+  </script>
+</body>
+</html>
