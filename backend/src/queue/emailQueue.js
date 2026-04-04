@@ -1,5 +1,6 @@
 const { Queue } = require("bullmq");
 const Redis = require("ioredis");
+require("dotenv").config();
 
 // Create a Redis connection using the full URL
 const connection = new Redis(process.env.REDIS_URL, {
